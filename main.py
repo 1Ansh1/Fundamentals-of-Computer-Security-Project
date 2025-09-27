@@ -94,7 +94,8 @@ class SnifferController:
         try:
             while not self.packet_queue.empty():
                 summary_data, full_packet = self.packet_queue.get_nowait()
-                item_id = self.gui.tree.insert("", tk.END, values=tuple(summary_data.values()))
+                row_tag = 'evenrow' if summary_data['id'] % 2 == 0 else 'oddrow'
+                item_id = self.gui.tree.insert("", tk.END, values=tuple(summary_data.values()), tags=(row_tag,))
                 self.packets_map[item_id] = full_packet
                 self.gui.tree.yview_moveto(1)
         finally:
