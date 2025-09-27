@@ -1,8 +1,10 @@
 import tkinter as tk
 import threading
 import queue
+from urllib.parse import unquote
 # This is the key import for getting detailed interface info
 from scapy.all import conf, get_if_list
+from scapy.all import Raw
 import io
 import contextlib
 
@@ -108,13 +110,50 @@ class SnifferController:
             
         packet_obj = self.packets_map.get(selected_item[0])
         if packet_obj:
+            formatted_credentials = ""
+            if packet_obj.haslayer(Raw):
+                try:
+                    payload = packet_obj[Raw].load.decode('utf-8', 'ignore')
+                    
+                    # --- NEW: Isolate the body from the headers ---
+                    # The body of a POST request comes after a double newline
+                    header_separator = "\r\n\r\n"
+                    if header_separator in payload:
+                        # Split the payload into headers and body
+                        header, body = payload.split(header_separator, 1)
+
+                        # Now, parse ONLY the body
+                        if 'username=' in body and 'password=' in body:
+                            data_parts = body.split('&')
+                            credentials = {}
+                            for part in data_parts:
+                                if '=' in part:
+                                    key, value = part.split('=', 1)
+                                    # Use unquote to handle special characters
+                                    credentials[key] = unquote(value)
+                            
+                            # Build the nicely formatted string
+                            formatted_credentials += "****************************************\n"
+                            formatted_credentials += "    PLAINTEXT CREDENTIALS CAPTURED!    \n"
+                            formatted_credentials += "****************************************\n"
+                            formatted_credentials += f"  Username: {credentials.get('username', 'N/A')}\n"
+                            formatted_credentials += f"  Password: {credentials.get('password', 'N/A')}\n"
+                            formatted_credentials += "****************************************\n\n"
+                except Exception as e:
+                    pass
+
+            # Get the regular, full packet details
             with io.StringIO() as buf, contextlib.redirect_stdout(buf):
                 packet_obj.show()
-                details_str = buf.getvalue()
+                full_details_str = buf.getvalue()
 
+            # Combine our special format with the full details
+            final_details = formatted_credentials + full_details_str
+
+            # Update the GUI
             self.gui.details_text.config(state=tk.NORMAL)
             self.gui.details_text.delete(1.0, tk.END)
-            self.gui.details_text.insert(tk.END, details_str)
+            self.gui.details_text.insert(tk.END, final_details)
             self.gui.details_text.config(state=tk.DISABLED)
 
 # --- Main execution block ---
